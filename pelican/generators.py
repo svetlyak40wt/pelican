@@ -1,9 +1,11 @@
-from operator import attrgetter
+from operator import attrgetter, itemgetter
 from itertools import chain
 from functools import partial
 from datetime import datetime
 from collections import defaultdict
 import os
+import math
+import random
 
 from jinja2 import Environment, FileSystemLoader
 from jinja2.exceptions import TemplateNotFound
@@ -14,7 +16,6 @@ from pelican.readers import read_file
 
 _TEMPLATES = ('index', 'tag', 'tags', 'article', 'category', 'categories',
               'archives', 'page')
-_DIRECT_TEMPLATES = ('index', 'tags', 'categories', 'archives')
 
 
 class Generator(object):
@@ -28,21 +29,23 @@ class Generator(object):
         for arg, value in kwargs.items():
             setattr(self, arg, value)
 
-    def get_templates(self):
-        """Return the templates to use.
+        # templates cache
+        self._templates = {}
+        self._templates_path = os.path.expanduser(os.path.join(self.theme, 'templates'))
+        self._env = Environment(loader = FileSystemLoader(self._templates_path))
+
+    def get_template(self, name):
+        """Return the template by name.
         Use self.theme to get the templates to use, and return a list of
         templates ready to use with Jinja2.
         """
-        path = os.path.expanduser(os.path.join(self.theme, 'templates'))
-        env = Environment(loader=FileSystemLoader(path))
-        templates = {}
-        for template in _TEMPLATES:
+        if name not in self._templates:
             try:
-                templates[template] = env.get_template('%s.html' % template)
+                self._templates[name] = self._env.get_template(name + '.html')
             except TemplateNotFound:
                 raise Exception('[templates] unable to load %s.html from %s' % (
-                    template, path))
-        return templates
+                    name, self._templates_path))
+        return self._templates[name]
 
     def get_files(self, path, exclude=[], extensions=None):
         """Return a list of files to use, based on rules
@@ -128,23 +131,28 @@ class ArticlesGenerator(Generator):
         """Generate the pages on the disk
         TODO: change the name"""
 
-        templates = self.get_templates()
         write = partial(
             writer.write_file,
             relative_urls = self.settings.get('RELATIVE_URLS')
         )
-        for template in _DIRECT_TEMPLATES:
-            write('%s.html' % template, templates[template], self.context,
+        for template in self.settings.get('DIRECT_TEMPLATES'):
+            write('%s.html' % template, self.get_template(template), self.context,
                     blog=True)
+
+        tag_template = self.get_template('tag')
         for tag, articles in self.tags.items():
-            write('tag/%s.html' % tag, templates['tag'], self.context, tag=tag,
+            write('tag/%s.html' % tag, tag_template, self.context, tag=tag,
                     articles=articles)
+
+        category_template = self.get_template('category')
         for cat in self.categories:
-            write('category/%s.html' % cat, templates['category'], self.context,
+            write('category/%s.html' % cat, category_template, self.context,
                           category=cat, articles=self.categories[cat])
+
+        article_template = self.get_template('article')
         for article in chain(self.translations, self.articles):
             write(article.save_as,
-                          templates['article'], self.context, article=article,
+                          article_template, self.context, article=article,
                           category=article.category)
 
     def generate_context(self):
@@ -193,8 +201,34 @@ class ArticlesGenerator(Generator):
         self.dates = list(self.articles)
         self.dates.sort(key=attrgetter('date'), 
                 reverse=self.context['REVERSE_ARCHIVE_ORDER'])
+
+        # create tag cloud
+        tag_cloud = defaultdict(int)
+        for article in self.articles:
+            for tag in article.tags:
+                tag_cloud[tag] += 1
+
+        tag_cloud = sorted(tag_cloud.items(), key = itemgetter(1), reverse = True)
+        tag_cloud = tag_cloud[:self.settings.get('TAG_CLOUD_MAX_ITEMS')]
+
+        max_count = max(map(itemgetter(1), tag_cloud))
+        steps = self.settings.get('TAG_CLOUD_STEPS')
+
+        # calculate word sizes
+        self.tag_cloud = [
+            (
+                tag,
+                int(
+                    math.floor(steps - (steps - 1) * math.log(count) / math.log(max_count))
+                )
+            )
+            for tag, count in tag_cloud
+        ]
+        # put words in chaos
+        random.shuffle(self.tag_cloud)
+
         # and generate the output :)
-        self._update_context(('articles', 'dates', 'tags', 'categories'))
+        self._update_context(('articles', 'dates', 'tags', 'categories', 'tag_cloud'))
 
     def generate_output(self, writer):
         self.generate_feeds(writer)
@@ -224,9 +258,8 @@ class PagesGenerator(Generator):
         self.context['PAGES'] = self.pages
 
     def generate_output(self, writer):
-        templates = self.get_templates()
         for page in chain(self.translations, self.pages):
-            writer.write_file('pages/%s' % page.save_as, templates['page'],
+            writer.write_file('pages/%s' % page.save_as, self.get_template('page'),
                     self.context, page=page,
                     relative_urls = self.settings.get('RELATIVE_URLS'))
 

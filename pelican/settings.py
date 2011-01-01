@@ -23,6 +23,9 @@ _DEFAULT_CONFIG = {'PATH': None,
                    'RELATIVE_URLS': True,
                    'DEFAULT_LANG': 'en',
                    'PELICAN_CLASS': 'pelican.Pelican',
+                   'TAG_CLOUD_STEPS': 4,
+                   'TAG_CLOUD_MAX_ITEMS': 100,
+                   'DIRECT_TEMPLATES': ('index', 'tags', 'categories', 'archives'),
                   }
 
 def read_settings(filename):

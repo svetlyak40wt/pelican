@@ -34,6 +34,8 @@ Setting name              what it does ?
 `DEFAULT_LANG`            The default language to use. Default is 'en'.
 `DISPLAY_PAGES_ON_MENU`   Display or not the pages on the menu of the template.
                           Templates can follow or not this settings.
+`DIRECT_TEMPLATES`        Tuple, containing templates to render. There should be
+                          a html file for each of these templates in the theme.
 `FALLBACK_ON_FS_DATE`     If True, pelican will use the file system dates infos
                           (mtime) if it can't get informations from the
                           metadata?
@@ -60,6 +62,8 @@ Setting name              what it does ?
 `STATIC_THEME_PATHS`      Static theme paths you want to copy. Default values
                           is `static`, but if your theme have others static paths,
                           you can put them here.
+`TAG_CLOUD_STEPS`         Count of different font sizes in the tag cloud.
+`TAG_CLOUD_MAX_ITEMS`     Maximum tags count in the cloud.
 `THEME`                   theme to use to product the output. can be the
                           complete static path to a theme folder, or chosen
                           between the list of default themes (see below)
